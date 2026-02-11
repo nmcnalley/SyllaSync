@@ -1,15 +1,17 @@
-# Ignore Mac system files
+# Ignore Mac/Windows system files
 .DS_Store
+Thumbs.db
 
-# Ignore Python "junk"
+# Ignore Python stuff
+__pycache__/
+*.py[cod]
 backend/venv/
-backend/__pycache__/
-*.pyc
+backend/.env
 
-# Ignore Node "junk" (massive folders)
+# Ignore Node (Frontend) stuff
 frontend/node_modules/
 frontend/dist/
 
-# Security: NEVER upload environment variables
-.env
-.env.local
+# Google Calendar Secrets
+backend/credentials.json
+backend/token.json
