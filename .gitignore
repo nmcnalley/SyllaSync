@@ -1,0 +1,15 @@
+# Ignore Mac system files
+.DS_Store
+
+# Ignore Python "junk"
+backend/venv/
+backend/__pycache__/
+*.pyc
+
+# Ignore Node "junk" (massive folders)
+frontend/node_modules/
+frontend/dist/
+
+# Security: NEVER upload environment variables
+.env
+.env.local
