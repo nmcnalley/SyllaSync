@@ -21,6 +21,7 @@ function App() {
   const [courses, setCourses] = useState([]) 
   const [isLoading, setIsLoading] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [isExporting, setIsExporting] = useState(false);
   
   // New State for Reminders
   const [addReminders, setAddReminders] = useState(true)
@@ -174,6 +175,45 @@ function App() {
     }
   }
 
+  const handleExportToSheets = async () => {
+    setIsExporting(true);
+    try {
+      // 1. Gather all events from all courses into one list
+      let allEvents = [];
+      courses.forEach(course => {
+        course.events.forEach(event => {
+          allEvents.push({
+            title: event.title,
+            date: event.date, // If missing, backend handles it as "TBA"
+            weight: event.weight,
+            course: course.name
+          });
+        });
+      });
+
+      if (allEvents.length === 0) {
+        alert("No events found to export.");
+        setIsExporting(false);
+        return;
+      }
+
+      // 2. Send to the Python backend
+      const payload = { events: allEvents };
+      const response = await axios.post("http://127.0.0.1:8000/export_sheets", payload);
+
+      // 3. Open the newly created Google Sheet in a new tab
+      if (response.data.url) {
+        window.open(response.data.url, '_blank', 'noopener,noreferrer');
+      }
+
+    } catch (error) {
+      console.error("Error exporting to sheets:", error);
+      alert("Failed to export to Google Sheets. Check console for details.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div style={{ padding: "40px", maxWidth: "1000px", margin: "0 auto", fontFamily: "sans-serif" }}>
       <h1>SyllaSync Semester Planner</h1>
@@ -200,11 +240,11 @@ function App() {
 
       {courses.length > 0 && (
         <div>
-          {/* Review Header with Reminder Checkbox */}
+          {/* Review Header with Reminder Checkbox & Both Action Buttons */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-            <h2>Review</h2>
+            <h2></h2>
             
-            <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
                 {/* REMINDER CHECKBOX */}
                 <label style={{ 
                     display: "flex", 
@@ -212,7 +252,7 @@ function App() {
                     gap: "10px", 
                     cursor: "pointer", 
                     fontWeight: "bold",
-                    background: "#f0f0f0", 
+                    background: "#423636", 
                     padding: "10px 15px",
                     borderRadius: "8px",
                     border: "2px solid #ccc",
@@ -224,19 +264,29 @@ function App() {
                         onChange={(e) => setAddReminders(e.target.checked)}
                         style={{ width: "18px", height: "18px", accentColor: "#423636", cursor: "pointer" }}
                     />
-                    🔔 Add Study Reminders
+                    Add Study Reminders
                 </label>
 
+                {/* EXPORT TO SHEETS BUTTON */}
                 <button 
-                onClick={handleAddToCalendar}
-                disabled={isSyncing}
-                style={{ backgroundColor: "#4285F4", color: "white", padding: "12px 24px", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "1.1rem", fontWeight: "bold" }}
+                  onClick={handleExportToSheets}
+                  disabled={isExporting}
+                  style={{ backgroundColor: "#0F9D58", color: "white", padding: "12px 20px", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "1.1rem", fontWeight: "bold" }}
                 >
-                {isSyncing ? "Syncing..." : "Sync to Google Calendar"}
+                  {isExporting ? "Exporting..." : "Export to Sheets"}
+                </button>
+
+                {/* SYNC TO CALENDAR BUTTON */}
+                <button 
+                  onClick={handleAddToCalendar}
+                  disabled={isSyncing}
+                  style={{ backgroundColor: "#4285F4", color: "white", padding: "12px 20px", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "1.1rem", fontWeight: "bold" }}
+                >
+                  {isSyncing ? "Syncing..." : "Sync to Calendar"}
                 </button>
             </div>
           </div>
-
+                
           {courses.map(course => {
             const totalWeight = calculateTotalWeight(course.events)
             const isPerfect = totalWeight === 100
