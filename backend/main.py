@@ -22,9 +22,14 @@ from googleapiclient.discovery import build
 
 app = FastAPI()
 
+origins = [
+    "http://localhost:5173", # Keep this so you can still test on your computer
+    "https://syllasync.vercel.app" # <-- ADD YOUR EXACT VERCEL URL HERE (No slash at the end!)
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
