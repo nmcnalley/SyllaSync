@@ -24,7 +24,7 @@ app = FastAPI()
 
 origins = [
     "http://localhost:5173", # Keep this so you can still test on your computer
-    "https://syllasync.vercel.app" # <-- ADD YOUR EXACT VERCEL URL HERE (No slash at the end!)
+    "https://syllasync-six.vercel.app" # <-- ADD YOUR EXACT VERCEL URL HERE (No slash at the end!)
 ]
 
 app.add_middleware(
