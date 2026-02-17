@@ -239,7 +239,6 @@ function App() {
             onClick={() => login()}
             style={{ backgroundColor: "white", color: "#444", padding: "10px 20px", border: "1px solid #ccc", borderRadius: "8px", cursor: "pointer", fontSize: "1.1rem", fontWeight: "bold", display: "inline-flex", alignItems: "center", gap: "10px" }}
           >
-            <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google Logo" width="20" />
             Sign in with Google
           </button>
         ) : (
