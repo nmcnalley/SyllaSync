@@ -295,7 +295,7 @@ async def export_sheets(payload: dict):
             "rule": {
                 "condition": {
                     "type": "ONE_OF_LIST",
-                    "values": [{"userEnteredValue": "Not Started"}, {"userEnteredValue": "In Progress"}, {"userEnteredValue": "Done"}]
+                    "values": [{"userEnteredValue": "Not Started"}, {"userEnteredValue": "In Progress"}, {"userEnteredValue": "Done"}, {"userEnteredValue": "Quiz"}, {"userEnteredValue": "Exam"}]
                 },
                 "showCustomUi": True, "strict": True
             }
