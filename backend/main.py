@@ -7,6 +7,7 @@ import io
 import pypdf
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from google.oauth2.credentials import Credentials
 
 # --- BULLETPROOF .ENV LOADING ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -44,21 +45,6 @@ SCOPES = [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/spreadsheets'
 ]
-
-def get_google_credentials():
-    """Handles Google Login for both Calendar and Sheets"""
-    creds = None
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-    return creds
 
 def extract_syllabus_data(text_content):
     model = genai.GenerativeModel("gemini-flash-latest")
@@ -124,22 +110,25 @@ async def upload_file(file: UploadFile = File(...)):
 async def create_events(payload: dict):
     events = payload.get("events", [])
     add_reminders = payload.get("addReminders", False)
+    user_token = payload.get("token") # <-- 1. Get the token from React
     
-    creds = get_google_credentials()
+    if not user_token:
+        raise HTTPException(status_code=401, detail="No Google token provided")
+        
+    # <-- 2. Build credentials DIRECTLY from the token! Goodbye token.json!
+    creds = Credentials(token=user_token) 
     service = build('calendar', 'v3', credentials=creds)
     
-    # --- NEW: FIND OR CREATE DEDICATED CALENDAR ---
+    # --- FIND OR CREATE DEDICATED CALENDAR ---
     calendar_summary = "SyllaSync Schedule"
     target_calendar_id = None
     
-    # 1. Search existing calendars to see if we already made it
     calendar_list = service.calendarList().list().execute()
     for calendar_list_entry in calendar_list.get('items', []):
         if calendar_list_entry['summary'] == calendar_summary:
             target_calendar_id = calendar_list_entry['id']
             break
             
-    # 2. If it doesn't exist yet, create it!
     if not target_calendar_id:
         calendar_body = {
             'summary': calendar_summary,
@@ -163,7 +152,6 @@ async def create_events(payload: dict):
         }
         
         try:
-            # ---> We use target_calendar_id instead of 'primary' <---
             service.events().insert(calendarId=target_calendar_id, body=body).execute()
             created_count += 1
 
@@ -180,7 +168,6 @@ async def create_events(payload: dict):
                             'colorId': "8",
                             'transparency': 'transparent'
                         }
-                        # ---> We use target_calendar_id here too <---
                         service.events().insert(calendarId=target_calendar_id, body=rem_body).execute()
                         created_count += 1
         except Exception as e:
@@ -193,10 +180,15 @@ async def create_events(payload: dict):
 @app.post("/export_sheets")
 async def export_sheets(payload: dict):
     events = payload.get("events", [])
+    user_token = payload.get("token") # <-- 1. Get the token from React
+    
     if not events:
         raise HTTPException(status_code=400, detail="No events provided")
+    if not user_token:
+        raise HTTPException(status_code=401, detail="No Google token provided")
 
-    creds = get_google_credentials()
+    # <-- 2. Build credentials directly from the token!
+    creds = Credentials(token=user_token)
     service = build('sheets', 'v4', credentials=creds)
 
     # 1. Create a new blank spreadsheet
@@ -211,7 +203,6 @@ async def export_sheets(payload: dict):
 
     # 2. Prepare the data
     values = [["Class", "Task", "Due Date", "Status", "Weight"]]
-    
     unique_classes = list(set())
 
     for ev in events:
@@ -238,7 +229,7 @@ async def export_sheets(payload: dict):
         spreadsheetId=sheet_id, range=range_name,
         valueInputOption='USER_ENTERED', body=body).execute()
 
-    # 4. HUGE FORMATTING UPGRADE
+    # 4. FORMATTING UPGRADE
     requests = []
 
     # --- A. Header Formatting ---
@@ -247,7 +238,7 @@ async def export_sheets(payload: dict):
             "range": {"sheetId": 0, "startRowIndex": 0, "endRowIndex": 1},
             "cell": {
                 "userEnteredFormat": {
-                    "backgroundColor": {"red": 0.3, "green": 0.2, "blue": 0.4}, # Dark Purple
+                    "backgroundColor": {"red": 0.3, "green": 0.2, "blue": 0.4},
                     "textFormat": {"foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}, "bold": True},
                     "horizontalAlignment": "CENTER"
                 }
@@ -256,8 +247,8 @@ async def export_sheets(payload: dict):
         }
     })
 
-    # --- B. Center Alignment for Class, Date, Status, and Weight (Skip Task) ---
-    for col_range in [{"start": 0, "end": 1}, {"start": 2, "end": 5}]: # Column A (0) and Columns C,D,E (2,3,4)
+    # --- B. Center Alignment ---
+    for col_range in [{"start": 0, "end": 1}, {"start": 2, "end": 5}]: 
         requests.append({
             "repeatCell": {
                 "range": {"sheetId": 0, "startRowIndex": 1, "endRowIndex": num_rows, "startColumnIndex": col_range["start"], "endColumnIndex": col_range["end"]},
@@ -268,7 +259,7 @@ async def export_sheets(payload: dict):
             }
         })
 
-    # --- C. Date Formatting (MMM D) ---
+    # --- C. Date Formatting ---
     requests.append({
         "repeatCell": {
             "range": {"sheetId": 0, "startRowIndex": 1, "endRowIndex": num_rows, "startColumnIndex": 2, "endColumnIndex": 3},
@@ -281,7 +272,7 @@ async def export_sheets(payload: dict):
         }
     })
 
-    # --- D. Borders for everything ---
+    # --- D. Borders ---
     requests.append({
         "updateBorders": {
             "range": {"sheetId": 0, "startRowIndex": 0, "endRowIndex": num_rows, "startColumnIndex": 0, "endColumnIndex": 5},
@@ -299,20 +290,20 @@ async def export_sheets(payload: dict):
             "rule": {
                 "condition": {
                     "type": "ONE_OF_LIST",
-                    "values": [{"userEnteredValue": "Not Started"}, {"userEnteredValue": "In Progress"}, {"userEnteredValue": "Done"}, {"userEnteredValue": "Quiz"}, {"userEnteredValue": "Exam"}]
+                    "values": [{"userEnteredValue": "Not Started"}, {"userEnteredValue": "In Progress"}, {"userEnteredValue": "Done"}]
                 },
                 "showCustomUi": True, "strict": True
             }
         }
     })
 
-    # --- F. Status Color Pills (Conditional Formatting) ---
+    # --- F. Status Color Pills ---
     status_colors = [
         ("Done", {"red": 0.2, "green": 0.6, "blue": 0.3}, {"red": 1.0, "green": 1.0, "blue": 1.0}),
         ("In Progress", {"red": 0.98, "green": 0.73, "blue": 0.0}, {"red": 0.0, "green": 0.0, "blue": 0.0}),
         ("Not Started", {"red": 0.9, "green": 0.9, "blue": 0.9}, {"red": 0.3, "green": 0.3, "blue": 0.3}),
         ("Quiz", {"red": 0.75, "green": 0.65, "blue": 0.90}, {"red": 1.0, "green": 1.0, "blue": 1.0}),
-        ("Exam", {"red": 0.35, "green": 0.15, "blue": 0.50}, {"red": 1.0, "green": 1.0, "blue": 1.0})
+        ("Exam", {"red": 0.35, "green": 0.15, "blue": 0.50}, {"red": 1.0, "green": 1.0, "blue": 1.0}) 
     ]
     for status, bg_color, text_color in status_colors:
         requests.append({
@@ -327,13 +318,13 @@ async def export_sheets(payload: dict):
             }
         })
 
-    # --- G. Auto-Color Classes (Conditional Formatting) ---
+    # --- G. Auto-Color Classes ---
     pastel_palette = [
-        {"red": 0.8, "green": 0.9, "blue": 1.0}, # Light Blue
-        {"red": 1.0, "green": 0.8, "blue": 0.8}, # Light Red/Pink
-        {"red": 0.8, "green": 1.0, "blue": 0.8}, # Light Green
-        {"red": 1.0, "green": 0.9, "blue": 0.7}, # Light Orange/Peach
-        {"red": 0.9, "green": 0.8, "blue": 1.0}  # Light Purple
+        {"red": 0.8, "green": 0.9, "blue": 1.0},
+        {"red": 1.0, "green": 0.8, "blue": 0.8},
+        {"red": 0.8, "green": 1.0, "blue": 0.8},
+        {"red": 1.0, "green": 0.9, "blue": 0.7},
+        {"red": 0.9, "green": 0.8, "blue": 1.0} 
     ]
     
     for i, class_name in enumerate(unique_classes):
@@ -344,13 +335,12 @@ async def export_sheets(payload: dict):
                     "ranges": [{"sheetId": 0, "startRowIndex": 1, "endRowIndex": num_rows, "startColumnIndex": 0, "endColumnIndex": 1}],
                     "booleanRule": {
                         "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": class_name}]},
-                        "format": {"backgroundColor": color, "textFormat": {"bold": True}} # FIXED: Removed alignment from here
+                        "format": {"backgroundColor": color, "textFormat": {"bold": True}}
                     }
                 }, "index": 0
             }
         })
 
-    # Send all formatting requests at once
     service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body={'requests': requests}).execute()
 
     return {"message": "Spreadsheet created successfully!", "url": sheet_url}
