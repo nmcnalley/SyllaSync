@@ -265,7 +265,7 @@ function App() {
         }}>
           {isLoading ? "Analyzing Files..." : "Select PDF Files (Upload Multiple)"}
         </label>
-        <p style={{ marginTop: "10px", color: "#ccc" }}>Select all your course PDFs at once.</p>
+        <p style={{ marginTop: "10px", color: "#ccc" }}>It might get stuck on analyzis PDFs, if it takes more than 30 seconds, try refreshing the page.</p>
       </div>
 
       {courses.length > 0 && (
