@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import axios from 'axios'
 import './App.css'
+import { useGoogleLogin } from '@react-oauth/google'
 
 // Google Calendar Colors
 const COLORS = [
@@ -22,6 +23,19 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isExporting, setIsExporting] = useState(false);
+  const [userToken, setUserToken] = useState(null);
+  
+  // --- GOOGLE LOGIN ---
+  const login = useGoogleLogin({
+    onSuccess: (codeResponse) => {
+      console.log("Login Success!", codeResponse);
+      setUserToken(codeResponse.access_token);
+      alert("Successfully logged in with Google!");
+    },
+    onError: (error) => console.log('Login Failed:', error),
+    // We must ask for Calendar and Sheets permissions here!
+    scope: "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/spreadsheets",
+  });
   
   // New State for Reminders
   const [addReminders, setAddReminders] = useState(true)
@@ -119,74 +133,74 @@ function App() {
     }])
   }
 
-  // --- UPDATED SYNC FUNCTION: SKIPS EMPTY DATES ---
+  // --- UPDATED SYNC FUNCTION ---
   const handleAddToCalendar = async () => {
+    if (!userToken) {
+      alert("Please sign in with Google first!");
+      return;
+    }
+
     setIsSyncing(true)
-    
-    // Filter out events that don't have a date
     let validEvents = []
     let skippedCount = 0
 
     courses.forEach(course => {
       course.events.forEach(event => {
         if (event.date) {
-            validEvents.push({
-              title: event.title,
-              date: event.date,
-              weight: event.weight,
-              course: course.name,   
-              colorId: course.color  
-            })
+          validEvents.push({
+            title: event.title, date: event.date, weight: event.weight, course: course.name, colorId: course.color
+          })
         } else {
-            skippedCount++
+          skippedCount++
         }
       })
     })
 
-    // If nothing to sync, stop
     if (validEvents.length === 0) {
-        alert("No events with dates found to sync.")
-        setIsSyncing(false)
-        return
+      alert("No events with dates found to sync.")
+      setIsSyncing(false)
+      return
     }
 
-    // Confirmation message
-    const message = skippedCount > 0 
-        ? `Found ${validEvents.length} events to sync (skipping ${skippedCount} without dates). Proceed?`
-        : `Add ${validEvents.length} events to Google Calendar?`
+    const message = skippedCount > 0
+      ? `Found ${validEvents.length} events to sync (skipping ${skippedCount} without dates). Proceed?`
+      : `Add ${validEvents.length} events to Google Calendar?`
 
     if (!confirm(message)) {
-        setIsSyncing(false)
-        return
+      setIsSyncing(false)
+      return
     }
 
     try {
       const payload = {
-          events: validEvents,
-          addReminders: addReminders
+        events: validEvents,
+        addReminders: addReminders,
+        token: userToken // <-- WE SEND THE TOKEN HERE
       }
       const response = await axios.post("http://127.0.0.1:8000/create_events", payload)
       alert(response.data.message)
     } catch (error) {
       console.error("Sync Error:", error)
-      alert("Failed to sync.")
+      alert("Failed to sync. Make sure you are logged in!")
     } finally {
       setIsSyncing(false)
     }
   }
 
+  // --- UPDATED EXPORT FUNCTION ---
   const handleExportToSheets = async () => {
+    if (!userToken) {
+      alert("Please sign in with Google first!");
+      return;
+    }
+
     setIsExporting(true);
     try {
-      // 1. Gather all events from all courses into one list
       let allEvents = [];
       courses.forEach(course => {
         course.events.forEach(event => {
           allEvents.push({
-            title: event.title,
-            date: event.date, // If missing, backend handles it as "TBA"
-            weight: event.weight,
-            course: course.name
+            title: event.title, date: event.date, weight: event.weight, course: course.name
           });
         });
       });
@@ -197,18 +211,18 @@ function App() {
         return;
       }
 
-      // 2. Send to the Python backend
-      const payload = { events: allEvents };
+      const payload = {
+        events: allEvents,
+        token: userToken // <-- WE SEND THE TOKEN HERE TOO
+      };
       const response = await axios.post("http://127.0.0.1:8000/export_sheets", payload);
 
-      // 3. Open the newly created Google Sheet in a new tab
       if (response.data.url) {
         window.open(response.data.url, '_blank', 'noopener,noreferrer');
       }
-
     } catch (error) {
       console.error("Error exporting to sheets:", error);
-      alert("Failed to export to Google Sheets. Check console for details.");
+      alert("Failed to export to Google Sheets. Make sure you are logged in!");
     } finally {
       setIsExporting(false);
     }
@@ -217,6 +231,23 @@ function App() {
   return (
     <div style={{ padding: "40px", maxWidth: "1000px", margin: "0 auto", fontFamily: "sans-serif" }}>
       <h1>SyllaSync Semester Planner</h1>
+
+      {/* --- GOOGLE LOGIN SECTION ADDED HERE --- */}
+      <div style={{ textAlign: "center", marginBottom: "20px" }}>
+        {!userToken ? (
+          <button 
+            onClick={() => login()}
+            style={{ backgroundColor: "white", color: "#444", padding: "10px 20px", border: "1px solid #ccc", borderRadius: "8px", cursor: "pointer", fontSize: "1.1rem", fontWeight: "bold", display: "inline-flex", alignItems: "center", gap: "10px" }}
+          >
+            <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google Logo" width="20" />
+            Sign in with Google
+          </button>
+        ) : (
+          <div style={{ backgroundColor: "#d4edda", color: "#155724", padding: "10px", borderRadius: "8px", display: "inline-block", fontWeight: "bold" }}>
+            ✅ Connected to Google
+          </div>
+        )}
+      </div>
       
       {/* Upload Box */}
       <div style={{ padding: "30px", border: "4px solid #ccc", borderRadius: "15px", textAlign: "center", marginBottom: "30px", background: "#423636" }}>
