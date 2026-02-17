@@ -62,7 +62,7 @@ function App() {
       const formData = new FormData()
       formData.append("file", file)
       try {
-        const response = await axios.post("http://127.0.0.1:8000/upload", formData)
+        const response = await axios.post("https://syllasync-backend.onrender.com/upload", formData)
         if (response.data) {
             const { course, events } = response.data
             setCourses(prev => [...prev, {
@@ -177,7 +177,7 @@ function App() {
         addReminders: addReminders,
         token: userToken // <-- WE SEND THE TOKEN HERE
       }
-      const response = await axios.post("http://127.0.0.1:8000/create_events", payload)
+      const response = await axios.post("https://syllasync-backend.onrender.com/create_events", payload)
       alert(response.data.message)
     } catch (error) {
       console.error("Sync Error:", error)
@@ -215,7 +215,7 @@ function App() {
         events: allEvents,
         token: userToken // <-- WE SEND THE TOKEN HERE TOO
       };
-      const response = await axios.post("http://127.0.0.1:8000/export_sheets", payload);
+      const response = await axios.post("https://syllasync-backend.onrender.com/export_sheets", payload);
 
       if (response.data.url) {
         window.open(response.data.url, '_blank', 'noopener,noreferrer');
