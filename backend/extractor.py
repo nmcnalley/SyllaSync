@@ -1,25 +1,17 @@
-import google.generativeai as genai
 import os
 import time
 from dotenv import load_dotenv
 import fitz  # PyMuPDF
-from google.api_core.exceptions import ResourceExhausted
+
+# Use the new SDK
+from google import genai
+from google.genai import types
+from google.genai.errors import APIError
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-generation_config = {
-    "temperature": 1,
-    "top_p": 0.95,
-    "top_k": 64,
-    "max_output_tokens": 8192,
-    "response_mime_type": "application/json",
-}
-
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash", # Updated to the standard naming convention
-    generation_config=generation_config
-)
+# The client automatically picks up GEMINI_API_KEY from your environment variables
+client = genai.Client()
 
 def extract_text_from_pdf(pdf_path):
     try:
@@ -59,23 +51,39 @@ def analyze_syllabus(text):
     """
     
     max_retries = 4
-    base_delay = 10 # Base wait time in seconds
+    base_delay = 12 # Slightly increased base delay for Uvicorn concurrency
 
     for attempt in range(max_retries):
         try:
-            response = model.generate_content([prompt, text])
+            # New SDK syntax for generation and configuration
+            response = client.models.generate_content(
+                model="gemini-3.8-flash",
+                contents=[prompt, text],
+                config=types.GenerateContentConfig(
+                    temperature=1,
+                    top_p=0.95,
+                    top_k=64,
+                    max_output_tokens=8192,
+                    response_mime_type="application/json",
+                )
+            )
             return response.text
             
-        except ResourceExhausted as e:
-            if attempt == max_retries - 1:
-                print("Max retries reached. Upload failed due to rate limits.")
-                raise e
-            
-            # Exponential backoff calculates the delay: 10s, 20s, 40s
-            sleep_time = base_delay * (2 ** attempt)
-            print(f"Rate limit (429) hit. Pausing for {sleep_time} seconds before attempt {attempt + 2}...")
-            time.sleep(sleep_time)
-            
+        except APIError as e:
+            # Catch the new SDK's APIError and check for a 429 status code
+            if e.code == 429:
+                if attempt == max_retries - 1:
+                    print("Max retries reached. Upload failed due to rate limits.")
+                    raise e
+                
+                sleep_time = base_delay * (2 ** attempt)
+                print(f"Rate limit (429) hit. Pausing for {sleep_time} seconds before attempt {attempt + 2}...")
+                time.sleep(sleep_time)
+            else:
+                # If it's a different API error (e.g., 400 Bad Request), don't retry
+                print(f"API Error: {e.message}")
+                raise
+                
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
             raise
