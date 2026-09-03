@@ -1,7 +1,9 @@
 import google.generativeai as genai
 import os
+import time
 from dotenv import load_dotenv
 import fitz  # PyMuPDF
+from google.api_core.exceptions import ResourceExhausted
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -15,8 +17,8 @@ generation_config = {
 }
 
 model = genai.GenerativeModel(
-    model_name = "gemini-flash-latest",
-    generation_config = generation_config
+    model_name="gemini-1.5-flash", # Updated to the standard naming convention
+    generation_config=generation_config
 )
 
 def extract_text_from_pdf(pdf_path):
@@ -31,7 +33,7 @@ def extract_text_from_pdf(pdf_path):
         raise
 
 def analyze_syllabus(text):
-    prompt = prompt = """
+    prompt = """
     Analyze this syllabus text. Extract two things:
     1. The Course Code (e.g., "CMPUT 301", "ECE 447", "MATH 100"). 
        - Strictly extract ONLY the code (Department + Number). 
@@ -56,5 +58,24 @@ def analyze_syllabus(text):
     - Do not include reading weeks or holidays, only graded items.
     """
     
-    response = model.generate_content([prompt, text])
-    return response.text
+    max_retries = 4
+    base_delay = 10 # Base wait time in seconds
+
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content([prompt, text])
+            return response.text
+            
+        except ResourceExhausted as e:
+            if attempt == max_retries - 1:
+                print("Max retries reached. Upload failed due to rate limits.")
+                raise e
+            
+            # Exponential backoff calculates the delay: 10s, 20s, 40s
+            sleep_time = base_delay * (2 ** attempt)
+            print(f"Rate limit (429) hit. Pausing for {sleep_time} seconds before attempt {attempt + 2}...")
+            time.sleep(sleep_time)
+            
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            raise
