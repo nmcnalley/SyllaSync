@@ -57,7 +57,7 @@ def analyze_syllabus(text):
         try:
             # New SDK syntax for generation and configuration
             response = client.models.generate_content(
-                model="gemini-3.8-flash",
+                model="gemini-1.5-flash",
                 contents=[prompt, text],
                 config=types.GenerateContentConfig(
                     temperature=1,
