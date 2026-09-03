@@ -52,7 +52,7 @@ SCOPES = [
 ]
 
 def extract_syllabus_data(text_content):
-    model = genai.GenerativeModel("gemini-flash-latest")
+    model = genai.GenerativeModel("gemini-1.5-flash")
     
     prompt = f"""
     You are a strict data extractor. Extract the course schedule from this syllabus.
